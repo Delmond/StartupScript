@@ -1,19 +1,26 @@
 #!/usr/bin/env python
+#import RPi.GPIO as GPIO
 
-import RPi.GPIO as GPIO
 import time
 import sqlite3
 from threading import Thread
+from from pad4pi import rpi_gpio
 GPIO.setwarnings(False)
 
-INPUT_PINS = [21,32,36,38,40]
-OUTPUT_PINS = [29,31,33,35,37]
+#Mode mora da bude BCM
+INPUT_PINS_BCM = [9, 12, 16, 20, 21]
+OUTPUT_PINS_CM = [5, 6, 13, 19, 26]
 
-GPIO.setmode(GPIO.BOARD)
+LAYOUT = [[1,2,3,4,5],
+	  [6,7,8,9,10],
+	  [11,12,13,14,15],
+	  [16,17,18,19,20],
+	  [21,22,23,24,25]]
 
-NumberOfButtons = len(OUTPUT_PINS) * len(INPUT_PINS)
+factory = rpi_gpio.KeypadFactory()
+keypad = factory.create_keypad(keypad=LAYOUT, row_pins=INPUT_PINS_BCM, col_pins=OUTPUT_PINS_CM)
+
 ACTIVE_PINS = []
-
 connection_locked = False
 
 def UpdateDatabase(lista):
@@ -25,33 +32,14 @@ def UpdateDatabase(lista):
         db_conn.commit()
         db_conn.close()
 
-for i in OUTPUT_PINS:
-	GPIO.setup(i,GPIO.OUT)
-	GPIO.output(i,GPIO.HIGH)
-for i in INPUT_PINS:
-	GPIO.setup(i,GPIO.IN,pull_up_down=GPIO.PUD_UP)
-
-def calcBed(i,j):
-        return i*len(INPUT_PINS) + j + 1
-counter = 0
-while(True):
-
-	for iid,i in enumerate(OUTPUT_PINS):
-		GPIO.output(i,GPIO.LOW)
-		for jid,j in enumerate(INPUT_PINS):
-			if(GPIO.input(j) == 0):
-				if (calcBed(iid,jid),) not in ACTIVE_PINS:
-                                        ACTIVE_PINS.append((calcBed(iid,jid),))
-                                        print calcBed(iid,jid), " bed pressed"
-		GPIO.output(i,GPIO.HIGH)
-	counter = counter + 1
-        if counter > 3000:
-                print "Thread starting..."
-                if(len(ACTIVE_PINS) > 0):
-                        thread = Thread(target = UpdateDatabase, args = (list(ACTIVE_PINS),))
-                        thread.start()
-                else:
-                        print "Nothing to add"
-                print "Thread ended..."
-                ACTIVE_PINS = []
-                counter = 0
+def keypresshandler(key):
+	if (key not in ACTIVE_PINS):
+		ACTIVE_PINS.append(key)
+		print key, " bed pressed"
+	if(len(ACTIVE_PINS) > 0):
+		thread = Thread(target = UpdateDatabase, args = (list(ACTIVE_PINS),))
+		thread.start()
+	else:
+		print "Nothing to add"
+	ACTIVE_PINS = []
+keypad.registerKeyPressHandler(keypresshandler)
